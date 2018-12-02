@@ -5,9 +5,20 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Post;
 use DB; //to use raw sql queries
+use Illuminate\Support\Facades\Storage;
 
 class PostsController extends Controller
 {
+     /**
+     * Create a new controller instance.
+     *
+     * @return void
+     */
+    public function __construct()
+    {
+        $this->middleware('auth', ['except' => ['index','show']]);
+    }
+
     /**
      * Display a listing of the resource.
      *
@@ -19,9 +30,14 @@ class PostsController extends Controller
         //return Post::where('title','Post Two')->get();
         //return DB::select('SELECT * FROM posts');
         //$posts =  Post::orderBy('created_at','desc')->take(1)->get();
-        $posts =  Post::orderBy('created_at','desc')->paginate(1);
+
+        $posts =  Post::orderBy('created_at','desc')->paginate(10);
+        $name = 'Test name';
         //$posts =  Post::orderBy('created_at','desc')->get();
-        return view('posts.index')->with('posts', $posts);
+        return view('posts.index')->with([
+                'posts' => $posts,
+                'name' => $name
+            ]);
     }
 
     /**
@@ -42,7 +58,41 @@ class PostsController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $this->validate($request, [
+            'title' => 'required',
+            'body' => 'required',
+            'cover_image' => 'image|nullable|max:1999'
+        ]);
+
+        if($request->hasFile('cover_image')){
+            //get filename with ext
+            $filenameWithExt = $request->file('cover_image')->getClientOriginalName();
+
+            //get just filename
+            $filename = pathinfo($filenameWithExt, PATHINFO_FILENAME);
+
+            //get just extension
+            $extension = $request->file('cover_image')->getClientOriginalExtension();
+
+            //file to store
+            $fileNameToStore = $filename.'_'.time().'.'.$extension;
+
+            //Save to disk
+            $path = $request->file('cover_image')->storeAs('public/cover_images', $fileNameToStore);
+        }else{
+            $fileNameToStore = 'noimage.png';
+        }
+
+        // create post
+        $post = new Post;
+        $post->title = $request->input('title');
+        $post->body = $request->input('body');
+        $post->user_id = auth()->user()->id;
+        $post->cover_image = $fileNameToStore;
+        $post->save();
+        $msg = 'Post Created Successfully!';
+
+        return redirect('/posts')->with('success',$msg);
     }
 
     /**
@@ -65,7 +115,15 @@ class PostsController extends Controller
      */
     public function edit($id)
     {
-        //
+        $post = Post::find($id);
+
+        //Check for correct user
+        if(auth()->user()->id !== $post->user_id){
+            return redirect('/posts')->with('error','Unauthorized Page!');
+        }
+
+        return view('posts.edit')->with('post', $post);
+
     }
 
     /**
@@ -77,7 +135,39 @@ class PostsController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //
+        $this->validate($request,[
+            'title' => 'required',
+            'body' => 'required',
+            'cover_image' => 'image|nullable|max:1999'
+        ]);
+
+        if($request->hasFile('cover_image')){
+            //get filename with ext
+            $filenameWithExt = $request->file('cover_image')->getClientOriginalName();
+
+            //get just filename
+            $filename = pathinfo($filenameWithExt, PATHINFO_FILENAME);
+
+            //get just extension
+            $extension = $request->file('cover_image')->getClientOriginalExtension();
+
+            //file to store
+            $fileNameToStore = $filename.'_'.time().'.'.$extension;
+
+            //Save to disk
+            $path = $request->file('cover_image')->storeAs('public/cover_images', $fileNameToStore);
+        }
+
+        $post = Post::find($id);
+        $post->title = $request->input('title');
+        $post->body = $request->input('body');
+        if($request->hasFile('cover_image')){
+            $post->cover_image = $fileNameToStore;
+        }
+        //Storage::delete()
+        $post->save();
+
+        return redirect('/posts')->with('success','Post udated!');
     }
 
     /**
@@ -88,6 +178,20 @@ class PostsController extends Controller
      */
     public function destroy($id)
     {
-        //
+        $post = Post::find($id);
+
+        //Check for correct user
+        if(auth()->user()->id !== $post->user_id){
+            return redirect('/posts')->with('error','Unauthorized Page!');
+        }
+
+        if($post->cover_image != 'noimage.png'){
+            //delete image
+            Storage::delete('public/cover_images/'.$post->cover_image);
+        }
+
+        $post->delete();
+        return redirect('/posts')->with('success', 'Post deleted!');
+
     }
 }

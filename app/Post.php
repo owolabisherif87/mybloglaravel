@@ -25,4 +25,8 @@ class Post extends Model
 
     //timestamps
     public $timestamps = true; //used to enable to disable timestamps, default = true
+
+    public function user(){
+        return $this->belongsTo('App\user');
+    }
 }
